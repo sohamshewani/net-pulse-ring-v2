@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.netpulse</groupId>
+    <artifactId>net-pulse-ring</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>net-pulse-ring</name>
+    <description>High-performance networking and ring buffer library with native components</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.1</junit.version>
+        <jmh.version>1.37</jmh.version>
+    </properties>
+
+    <dependencies>
+        <!-- JMH for Benchmarking -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>${jmh.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>${jmh.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 5 for Testing -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+
+            <!-- Surefire Plugin for Unit Tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+
+            <!-- Exec Plugin to bridge targets: all, build, test, clean, benchmark -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <!-- Target: clean (Extended via AntRun or Clean Plugin if needed, handled natively below) -->
+                    
+                    <!-- Target: build -->
+                    <execution>
+                        <id>cargo-build-opt</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>sh</executable>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <arguments>
+                                <argument>-c</argument>
+                                <argument>
+                                    if [ -d "src/main/native" ] || [ -f "CMakeLists.txt" ]; then
+                                        mkdir -p build && cd build && \
+                                        cmake -DCMAKE_C_FLAGS="-O3 -Wall -Wextra" -DCMAKE_CXX_FLAGS="-O3 -Wall -Wextra" .. && \
+                                        cmake --build . --config Release;
+                                    else
+                                        echo "No native C/C++ source directory found. Skipping native compilation.";
+                                    fi
+                                </argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                    <!-- Target: benchmark -->
+                    <execution>
+                        <id>run-benchmarks</id>
+                        <phase>integration-test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>sh</executable>
+                            <arguments>
+                                <argument>-c</argument>
+                                <argument>
+                                    if [ -d "src/test/java" ]; then
+                                        mvn test-compile exec:java -Dexec.mainClass="org.openjdk.jmh.Main";
+                                    else
+                                        echo "No benchmark/test sources found. Skipping benchmarks.";
+                                    fi
+                                </argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Clean Plugin to safely clean optional build artifacts without failing -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-clean-plugin</artifactId>
+                <version>3.3.2</version>
+                <configuration>
+                    <filesets>
+                        <fileset>
+                            <directory>build</directory>
+                            <includes>
+                                <include>**/*</include>
+                            </includes>
+                            <followSymlinks>false</followSymlinks>
+                        </fileset>
+                    </filesets>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!-- Lifecycle mapping profiles to satisfy 'all', 'build', 'test', 'clean', 'benchmark' via standard phases -->
+        <profile>
+            <id>all</id>
+            <build>
+                <defaultGoal>clean compile test-compile integration-test</defaultGoal>
+            </build>
+        </profile>
+        <profile>
+            <id>build-target</id>
+            <build>
+                <defaultGoal>compile</defaultGoal>
+            </build>
+        </profile>
+        <profile>
+            <id>test-target</id>
+            <build>
+                <defaultGoal>test</defaultGoal>
+            </build>
+        </profile>
+        <profile>
+            <id>
